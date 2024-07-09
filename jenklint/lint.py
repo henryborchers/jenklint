@@ -1,36 +1,49 @@
 import os
 import sys
 import typing
-
+import pathlib
 from xml.dom import minidom
 
 import requests
+from requests.auth import HTTPBasicAuth 
 import argparse
-
 
 def read_jenkinsfile(jenkinsfile: str) -> str:
     with open(jenkinsfile, "r") as f:
         return f.read()
 
+def get_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="This will locate the Jenkinsfile in the current working "
+                    "directory and run the linter based on your Jenkins "
+                    "server.",
+        epilog="Jenkins server can also be set using the environment "
+               "JENKINS_URL.")
+    parser.add_argument("jenkinsfile", default=os.path.join(os.getcwd(), "Jenkinsfile"), type=pathlib.Path)
+    parser.add_argument(
+        "--jenkins-url", 
+        default=os.environ.get('JENKINS_URL'),
+        required="JENKINS_URL" not in os.environ,
+        )
+    parser.add_argument(
+        "--jenkins_user_id", 
+        default=os.environ.get('JENKINS_USER_ID'),
+        required="JENKINS_USER_ID" not in os.environ,
+        )
+    parser.add_argument(
+        "--jenkins-password", 
+        default=os.environ.get('JENKINS_PASSWORD'),
+        required="JENKINS_PASSWORD" not in os.environ,
+        )
+    return parser
+
+
 
 def main() -> None:
-    jenkins_url = get_jenkins_url()
-    if not jenkins_url:
-        sys.exit("No Jenkins URL is set")
+    arg_parser = get_arg_parser()
+    args = arg_parser.parse_args()
 
-    # Locate the Jenkinsfile
-    jenkinsfile = find_jenkinsfile()
-    if not jenkinsfile:
-        print("No Jenkinsfile found", file=sys.stderr)
-        sys.exit()
-
-    # request a crumb from Jenkins
-    try:
-        crumb = get_crumb(jenkins_url=jenkins_url)
-    except ConnectionError as e:
-        sys.exit(e)
-
-    response = run_lint(jenkinsfile, jenkins_url, crumb)
+    response = run_lint(args.jenkinsfile, args.jenkins_url, args.jenkins_user_id, args.jenkins_password)
     print(response)
 
 
@@ -42,6 +55,7 @@ def get_jenkins_url() -> str:
                     "server.",
         epilog="Jenkins server can also be set using the environment "
                "JENKINS_URL.")
+               
 
     try:
         url = os.environ['JENKINS_URL']
@@ -81,10 +95,7 @@ def find_jenkinsfile() -> typing.Optional[str]:
     return None
 
 
-def run_lint(jenkinsfile: str, jenkins_url: str, crumb: str) -> str:
-    header = {
-        "crumbRequestField": crumb
-    }
+def run_lint(jenkinsfile: str, jenkins_url: str, username: str, password: str) -> str:
 
     with open(jenkinsfile, "r") as f:
         jenkins_file_data = f.read()
@@ -97,7 +108,8 @@ def run_lint(jenkinsfile: str, jenkins_url: str, crumb: str) -> str:
 
     r = requests.post(
         url=url,
-        headers=header, data=payload)
+        auth = HTTPBasicAuth(username=username, password=password), 
+        data=payload)
 
     if r.status_code != 200:
         print(r.text, file=sys.stderr)

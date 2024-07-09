@@ -1,0 +1,7 @@
+-   id: jenklint
+    name: Run jenklint
+    description: This validates Jenkinsfile.
+    entry: jenklint
+    language: python
+    types: [text]
+    files: Jenkinsfile
